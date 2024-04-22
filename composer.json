@@ -1,16 +1,16 @@
 {
-   "name": "Omegaalfa/Cookie",
+   "name": "omegaalfa/cookie",
     "description": "Class for operations with cookies in PHP",
     "type": "library",
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Omegaalfa\\Cookie\\": "src/"
+            "omegaalfa\\Cookie\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Omegaalfa\\Cookie\\tests\\": "tests/"
+            "omegaalfa\\Cookie\\tests\\": "tests/"
         }
     },
     "require-dev": {
