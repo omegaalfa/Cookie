@@ -1,0 +1,23 @@
+{
+   "name": "omegaalfa/Cookie",
+    "description": "Class for operations with cookies in PHP",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "omegaalfa\\Cookie\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "omegaalfa\\Cookie\\tests\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.5"
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    },
+    "minimum-stability": "stable"
+}
