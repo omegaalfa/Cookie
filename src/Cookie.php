@@ -7,12 +7,11 @@ namespace omegaalfa\Cookie;
  *
  * @package src\classes
  */
-class Cookie
+class Cookie implements CookieInterface
 {
 	/**
 	 * Ex. Cookie::set('theme', 'red');
 	 * setcookie('SID', '31d4d96e407aad42', time() + 3600, '/~rasmus/', 'example.com', true, true, 'Strict');
-	 *
 	 * @param  string       $name
 	 * @param  string       $value
 	 * @param  int|null     $expiration
@@ -27,23 +26,51 @@ class Cookie
 	public static function set(
 		string $name,
 		string $value,
-		null|int $expiration = null,
-		string $path = "",
-		string $domain = "",
-		bool $secure = false,
-		bool $httpOnly = false,
+		int|null $expiration = 0,
+		string|null $path = "/",
+		string|null $domain = "",
+		bool|null $secure = false,
+		bool|null $httpOnly = false,
 		null|string $sameSite = null
 	): bool {
-		return setcookie($name, $value, [
+		return setcookie($name, $value, self::setCookieOptions($expiration, $path, $domain, $secure, $httpOnly, $sameSite));
+	}
+
+	/**
+	 * @param  int|null     $expiration
+	 * @param  string       $path
+	 * @param  string       $domain
+	 * @param  bool         $secure
+	 * @param  bool         $httpOnly
+	 * @param  string|null  $sameSite
+	 *
+	 * @return array
+	 */
+	public static function setCookieOptions(
+		int|null $expiration,
+		string|null $path,
+		string|null $domain,
+		bool|null $secure = false,
+		bool|null $httpOnly = false,
+		null|string $sameSite = null
+	): array {
+		$options = [
 			'expires'  => $expiration,
 			'path'     => $path,
 			'domain'   => $domain,
 			'secure'   => $secure,
 			'httponly' => $httpOnly,
 			'samesite' => $sameSite,
-		]);
-	}
+		];
 
+		foreach($options as $key => $option){
+			if(!$option){
+				unset($options[$key]);
+			}
+		}
+
+		return $options;
+	}
 
 	/**
 	 * @param  string  $name
@@ -239,12 +266,12 @@ class Cookie
 	 */
 	public static function deleteCookiesByRegex(string $regex): bool
 	{
-		$matchingCookies = self::getCookieValueByRegex($regex);
-		foreach(array_keys($matchingCookies) as $name) {
-			if(!self::delete($name)) {
+		foreach(self::getAllCookies() as $cookieName => $cookieValue) {
+			if(preg_match($regex, $cookieName) && !self::delete($cookieName)) {
 				return false;
 			}
 		}
+
 		return true;
 	}
 }
