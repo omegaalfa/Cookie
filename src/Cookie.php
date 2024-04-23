@@ -27,12 +27,12 @@ class Cookie
 	public static function set(
 		string $name,
 		string $value,
-		?int $expiration = null,
+		null|int $expiration = null,
 		string $path = "",
 		string $domain = "",
 		bool $secure = false,
 		bool $httpOnly = false,
-		?string $sameSite = null
+		null|string $sameSite = null
 	): bool {
 		return setcookie($name, $value, [
 			'expires'  => $expiration,
