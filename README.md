@@ -6,6 +6,32 @@ This is a simple PHP class that provides an easy-to-use interface for working wi
 
 A classe `Cookie` é uma ferramenta utilitária para gerenciar cookies no PHP. Ela fornece uma interface orientada a objetos para definir, obter, deletar e verificar a existência de cookies, além de outras funcionalidades relacionadas a cookies.
 
+## Installation
+
+You can install the `Cookie` class using Composer:
+
+```bash
+composer require omegaalfa/cookie:dev-main
+```
+
+```php
+use omegaalfa\Cookie;
+
+// Set a cookie
+Cookie::make('username', 'John Doe')
+     ->withExpiration(3600)
+     ->withPath('/')
+     ->withDomain('.example.com')
+     ->withSecure(true)
+     ->withHttpOnly(true)
+     ->send();
+
+// Get the value of a cookie
+$username = Cookie::get('username');
+
+// Delete a cookie
+Cookie::delete('username');
+
 ## Métodos
 
 ### `set`
@@ -92,31 +118,7 @@ Deleta todos os cookies que correspondem a uma expressão regular dada.
 Cookie::deleteCookiesByRegex('/^theme/');
 ```
 
-## Installation
 
-You can install the `Cookie` class using Composer:
-
-```bash
-composer require omegaalfa/cookie
-```
-
-```php
-use omegaalfa\Cookie;
-
-// Set a cookie
-Cookie::make('username', 'John Doe')
-     ->withExpiration(3600)
-     ->withPath('/')
-     ->withDomain('.example.com')
-     ->withSecure(true)
-     ->withHttpOnly(true)
-     ->send();
-
-// Get the value of a cookie
-$username = Cookie::get('username');
-
-// Delete a cookie
-Cookie::delete('username');
 
 // Check if a cookie exists
 if (Cookie::exists('name')) {
