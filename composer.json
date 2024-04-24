@@ -23,5 +23,5 @@
     "scripts": {
         "test": "vendor/bin/phpunit"
     },
-    "minimum-stability": "dev"
+    "minimum-stability": "stable"
 }
