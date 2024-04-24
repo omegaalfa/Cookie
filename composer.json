@@ -17,8 +17,17 @@
         "php": "^8.0",
         "another-vendor/package": "1.*"
     },
+    "minimum-stability": "stable",
     "require-dev": {
         "phpunit/phpunit": "^9.5"
+    },
+    "config": {
+        "preferred-install": "dist"
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-master": "1.0-dev"
+        }
     },
     "scripts": {
         "test": "vendor/bin/phpunit"
