@@ -15,7 +15,8 @@
     },
    "require": {
         "php": "^8.0",
-        "another-vendor/package": "1.*"
+        "another-vendor/package": "1.0.0",
+        "omegaalfa/cookie": "*"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.5"
