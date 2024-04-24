@@ -1,5 +1,5 @@
 {
-    "name": "omegaalfa/cookie",
+   "name": "omegaalfa/cookie",
     "description": "Class for operations with cookies in PHP",
     "type": "library",
     "license": "MIT",
@@ -13,18 +13,14 @@
             "omegaalfa\\Cookie\\tests\\": "tests/"
         }
     },
-    "require": {
-        "php": "^8.0",
+   "require": {
+        "php": "^8.0"
     },
-    "minimum-stability": "dev",
-    "prefer-stable": true,
     "require-dev": {
         "phpunit/phpunit": "^9.5"
     },
-    "config": {
-        "preferred-install": "dist"
-    },
     "scripts": {
         "test": "vendor/bin/phpunit"
-    }
+    },
+    "minimum-stability": "stable"
 }
