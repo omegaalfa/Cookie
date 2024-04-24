@@ -15,7 +15,7 @@
     },
     "require": {
         "php": "^8.0",
-        "another-vendor/package": "1.*"
+        "another-vendor/package": "v1.*"
     },
     "minimum-stability": "stable",
     "require-dev": {
