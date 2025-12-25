@@ -33,11 +33,12 @@ jobs:
           COMMITS=$(git log --format='%s' "${LAST_COMMIT}..${CURRENT_COMMIT}")
           echo "Debug: All commits in range:"
           echo "$COMMITS"
-          CONVENTIONAL_COMMITS=$(echo "$COMMITS" | grep -E '^(feat|fix|docs|style|refactor|test|build|perf|ci|chore|revert|merge|wip): ' || true)
-          echo "Debug: Conventional commits found:"
-          echo "$CONVENTIONAL_COMMITS"
+          # Accept conventional commits OR merge commits (Merge branch/pull request)
+          VALID_COMMITS=$(echo "$COMMITS" | grep -E '^(feat|fix|docs|style|refactor|test|build|perf|ci|chore|revert|wip)(\(.+\))?: |^Merge ' || true)
+          echo "Debug: Valid commits found:"
+          echo "$VALID_COMMITS"
           echo "stdout<<EOF" >> $GITHUB_OUTPUT
-          echo "$CONVENTIONAL_COMMITS" >> $GITHUB_OUTPUT
+          echo "$VALID_COMMITS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Verify commit messages
