@@ -26,6 +26,25 @@ class CookieTest extends TestCase
         }
         putenv('COOKIE_CONSENT_SECRET');
         unset($_ENV['COOKIE_CONSENT_SECRET'], $_SERVER['COOKIE_CONSENT_SECRET']);
+        
+        // Reset encryption and queue state
+        $reflection = new ReflectionClass(Cookie::class);
+        
+        $encryptionKey = $reflection->getProperty('encryptionKey');
+        $encryptionKey->setAccessible(true);
+        $encryptionKey->setValue(null, '');
+        
+        $encryptByDefault = $reflection->getProperty('encryptByDefault');
+        $encryptByDefault->setAccessible(true);
+        $encryptByDefault->setValue(null, false);
+        
+        $encryptionExcept = $reflection->getProperty('encryptionExcept');
+        $encryptionExcept->setAccessible(true);
+        $encryptionExcept->setValue(null, []);
+        
+        $queue = $reflection->getProperty('queue');
+        $queue->setAccessible(true);
+        $queue->setValue(null, []);
     }
 
     protected function tearDown(): void
@@ -268,5 +287,276 @@ class CookieTest extends TestCase
         $_COOKIE['dummy'] = 'value';
         $this->expectException(InvalidArgumentException::class);
         Cookie::getCookieValueByRegex('/(unclosed-group/');
+    }
+
+    // =========================================================================
+    // ENCRYPTION TESTS
+    // =========================================================================
+
+    public function testConfigureEncryptionWithValidKey(): void
+    {
+        $key = str_repeat('a', 32);
+        Cookie::configureEncryption($key);
+        $this->expectNotToPerformAssertions();
+    }
+
+    public function testConfigureEncryptionThrowsExceptionForShortKey(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Encryption key must be at least 32 bytes');
+        Cookie::configureEncryption('short-key');
+    }
+
+    public function testEncryptAndDecryptRoundTrip(): void
+    {
+        $key = str_repeat('a', 32);
+        Cookie::configureEncryption($key);
+        
+        $originalValue = 'sensitive data';
+        $encrypted = Cookie::encrypt($originalValue);
+        
+        // Encrypted value should be different from original
+        $this->assertNotEquals($originalValue, $encrypted);
+        
+        // Should be base64 encoded
+        $this->assertNotFalse(base64_decode($encrypted, true));
+        
+        // Decryption should return original value
+        $decrypted = Cookie::decrypt($encrypted);
+        $this->assertEquals($originalValue, $decrypted);
+    }
+
+    public function testDecryptReturnsNullForInvalidData(): void
+    {
+        $key = str_repeat('a', 32);
+        Cookie::configureEncryption($key);
+        
+        // Invalid base64
+        $this->assertNull(Cookie::decrypt('not-valid-base64!!!'));
+        
+        // Valid base64 but too short
+        $this->assertNull(Cookie::decrypt(base64_encode('short')));
+        
+        // Valid base64 but wrong format
+        $this->assertNull(Cookie::decrypt(base64_encode(str_repeat('x', 50))));
+    }
+
+    public function testEncryptThrowsExceptionWithoutKey(): void
+    {
+        // Key is already empty from setUp, so this should throw
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Encryption key not configured');
+        Cookie::encrypt('test');
+    }
+
+    public function testDecryptThrowsExceptionWithoutKey(): void
+    {
+        // Key is already empty from setUp, so this should throw
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Encryption key not configured');
+        Cookie::decrypt('test');
+    }
+
+    /** @runInSeparateProcess */
+    public function testSetEncrypted(): void
+    {
+        $key = str_repeat('a', 32);
+        Cookie::configureEncryption($key);
+        
+        $this->assertTrue(Cookie::setEncrypted('secure_cookie', 'secret value'));
+    }
+
+    public function testGetDecryptedWithMissingCookie(): void
+    {
+        $key = str_repeat('a', 32);
+        Cookie::configureEncryption($key);
+        
+        $this->assertEquals('default', Cookie::getDecrypted('nonexistent', 'default'));
+    }
+
+    public function testGetDecryptedWithInvalidEncryptedValue(): void
+    {
+        $key = str_repeat('a', 32);
+        Cookie::configureEncryption($key);
+        
+        $_COOKIE['bad_cookie'] = 'not-encrypted-value';
+        $this->assertEquals('fallback', Cookie::getDecrypted('bad_cookie', 'fallback'));
+    }
+
+    public function testConfigureEncryptionWithExceptArray(): void
+    {
+        $key = str_repeat('a', 32);
+        Cookie::configureEncryption($key, true, ['session_id', 'csrf_token']);
+        
+        $reflection = new ReflectionClass(Cookie::class);
+        $encryptByDefault = $reflection->getProperty('encryptByDefault');
+        $encryptByDefault->setAccessible(true);
+        $this->assertTrue($encryptByDefault->getValue(null));
+        
+        $except = $reflection->getProperty('encryptionExcept');
+        $except->setAccessible(true);
+        $this->assertEquals(['session_id', 'csrf_token'], $except->getValue(null));
+    }
+
+    // =========================================================================
+    // FOREVER COOKIE TESTS
+    // =========================================================================
+
+    /** @runInSeparateProcess */
+    public function testForever(): void
+    {
+        $this->assertTrue(Cookie::forever('remember_me', 'token_value'));
+    }
+
+    public function testForeverConstant(): void
+    {
+        $reflection = new ReflectionClass(Cookie::class);
+        $foreverMinutes = $reflection->getConstant('FOREVER_MINUTES');
+        
+        // 400 days in minutes = 400 * 24 * 60 = 576000
+        $this->assertEquals(576000, $foreverMinutes);
+    }
+
+    // =========================================================================
+    // QUEUE TESTS
+    // =========================================================================
+
+    public function testQueueBasicOperations(): void
+    {
+        Cookie::queue('test_cookie', 'test_value');
+        
+        $this->assertTrue(Cookie::hasQueued('test_cookie'));
+        $this->assertEquals(1, Cookie::queueCount());
+        
+        $queued = Cookie::getQueued('test_cookie');
+        $this->assertIsArray($queued);
+        $this->assertEquals('test_value', $queued['value']);
+    }
+
+    public function testGetQueuedReturnsNullForNonExistent(): void
+    {
+        $this->assertNull(Cookie::getQueued('nonexistent_cookie'));
+    }
+
+    public function testUnqueue(): void
+    {
+        Cookie::queue('to_remove', 'value');
+        $this->assertTrue(Cookie::hasQueued('to_remove'));
+        
+        Cookie::unqueue('to_remove');
+        $this->assertFalse(Cookie::hasQueued('to_remove'));
+    }
+
+    public function testGetAllQueued(): void
+    {
+        Cookie::flushQueue(); // Clear any existing queue
+        
+        Cookie::queue('cookie1', 'value1');
+        Cookie::queue('cookie2', 'value2');
+        
+        $all = Cookie::getAllQueued();
+        $this->assertCount(2, $all);
+        $this->assertArrayHasKey('cookie1', $all);
+        $this->assertArrayHasKey('cookie2', $all);
+    }
+
+    public function testFlushQueue(): void
+    {
+        Cookie::queue('test', 'value');
+        $this->assertGreaterThan(0, Cookie::queueCount());
+        
+        Cookie::flushQueue();
+        $this->assertEquals(0, Cookie::queueCount());
+    }
+
+    public function testQueueEncrypted(): void
+    {
+        $key = str_repeat('b', 32);
+        Cookie::configureEncryption($key);
+        
+        Cookie::queueEncrypted('encrypted_cookie', 'secret_data');
+        
+        $queued = Cookie::getQueued('encrypted_cookie');
+        $this->assertNotEquals('secret_data', $queued['value']);
+        
+        // Should be decryptable
+        $decrypted = Cookie::decrypt($queued['value']);
+        $this->assertEquals('secret_data', $decrypted);
+    }
+
+    public function testQueueForever(): void
+    {
+        Cookie::flushQueue();
+        
+        Cookie::queueForever('persistent_cookie', 'long_lived_value');
+        
+        $queued = Cookie::getQueued('persistent_cookie');
+        $this->assertIsArray($queued);
+        $this->assertEquals('long_lived_value', $queued['value']);
+        
+        // Check that expiration is set for ~400 days in the future
+        $expectedMinExpiration = time() + (400 * 24 * 60 * 60) - 60; // Allow 60 second tolerance
+        $this->assertGreaterThanOrEqual($expectedMinExpiration, $queued['options']['expires']);
+    }
+
+    public function testQueueDelete(): void
+    {
+        Cookie::flushQueue();
+        
+        Cookie::queueDelete('cookie_to_delete');
+        
+        $this->assertTrue(Cookie::hasQueued('cookie_to_delete'));
+        $queued = Cookie::getQueued('cookie_to_delete');
+        
+        // Delete queue entry should have empty value
+        $this->assertEquals('', $queued['value']);
+        
+        // Expiration should be in the past
+        $this->assertLessThan(time(), $queued['options']['expires']);
+    }
+
+    /** @runInSeparateProcess */
+    public function testSendQueued(): void
+    {
+        Cookie::flushQueue();
+        
+        Cookie::queue('cookie1', 'value1');
+        Cookie::queue('cookie2', 'value2');
+        
+        $this->assertEquals(2, Cookie::queueCount());
+        
+        $result = Cookie::sendQueued();
+        $this->assertTrue($result);
+        
+        // Queue should be cleared after sending
+        $this->assertEquals(0, Cookie::queueCount());
+    }
+
+    public function testQueueWithOptions(): void
+    {
+        Cookie::flushQueue();
+        
+        $expiration = time() + 7200;
+        Cookie::queue('custom_cookie', 'custom_value', $expiration, '/app', '.example.com', true, true, 'Strict');
+        
+        $queued = Cookie::getQueued('custom_cookie');
+        $this->assertEquals($expiration, $queued['options']['expires']);
+        $this->assertEquals('/app', $queued['options']['path']);
+        $this->assertEquals('.example.com', $queued['options']['domain']);
+        $this->assertTrue($queued['options']['secure']);
+        $this->assertTrue($queued['options']['httponly']);
+        $this->assertEquals('Strict', $queued['options']['samesite']);
+    }
+
+    public function testQueueOverwritesSameNameCookie(): void
+    {
+        Cookie::flushQueue();
+        
+        Cookie::queue('same_name', 'first_value');
+        Cookie::queue('same_name', 'second_value');
+        
+        $this->assertEquals(1, Cookie::queueCount());
+        $queued = Cookie::getQueued('same_name');
+        $this->assertEquals('second_value', $queued['value']);
     }
 }

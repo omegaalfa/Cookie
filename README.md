@@ -7,7 +7,7 @@
 [![Code Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg?style=flat-square)](https://github.com/omegaalfa/cookie)
 [![Total Downloads](https://img.shields.io/packagist/dt/omegaalfa/cookie.svg?style=flat-square)](https://packagist.org/packages/omegaalfa/cookie)
 
-Uma biblioteca PHP moderna, segura e elegante para gerenciamento de cookies. Projetada com interface estática fluida, focada em segurança e nas melhores práticas de desenvolvimento.
+Uma biblioteca PHP moderna, segura e elegante para gerenciamento de cookies. Projetada com interface estática fluida, criptografia AES-256-GCM, sistema de queue e focada em segurança e nas melhores práticas de desenvolvimento.
 
 ---
 
@@ -18,16 +18,12 @@ Uma biblioteca PHP moderna, segura e elegante para gerenciamento de cookies. Pro
 - [Instalação](#-instalação)
 - [Início Rápido](#-início-rápido)
 - [Documentação da API](#-documentação-da-api)
-  - [set()](#setname-value-expiration-path-domain-secure-httponly-samesite)
-  - [get()](#getname-defaultvalue)
-  - [exists()](#existsname)
-  - [delete()](#deletename-path-domain-secure)
-  - [getAllCookies()](#getallcookies)
-  - [clearAllCookies()](#clearallcookies)
-  - [setCookieOptions()](#setcookieoptionsexpiration-path-domain-secure-httponly-samesite)
-  - [checkCookieConsent()](#checkcookieconsent)
-  - [getCookieValueByRegex()](#getcookievaluebyregexregex)
-  - [deleteCookiesByRegex()](#deletecookiesbyregexregex)
+  - [Operações Básicas](#operações-básicas)
+  - [Criptografia](#criptografia)
+  - [Sistema de Queue](#sistema-de-queue)
+  - [Cookie Forever](#cookie-forever)
+  - [Consentimento](#consentimento)
+  - [Operações com Regex](#operações-com-regex)
 - [Guia de Segurança](#-guia-de-segurança)
 - [Consentimento de Cookies (LGPD/GDPR)](#-consentimento-de-cookies-lgpdgdpr)
 - [Testes](#-testes)
@@ -41,8 +37,11 @@ Uma biblioteca PHP moderna, segura e elegante para gerenciamento de cookies. Pro
 | Recurso | Descrição |
 |---------|-----------|
 | 🔒 **Seguro por Padrão** | Cookies com `HttpOnly`, `Secure` e `SameSite='Lax'` habilitados automaticamente |
-| 🛡️ **Proteção contra ReDoS** | Validação de expressões regulares para prevenir ataques de negação de serviço |
-| ✍️ **Consentimento HMAC** | Verificação criptográfica de consentimento de cookies (LGPD/GDPR) |
+| 🔐 **Criptografia AES-256-GCM** | Criptografia autenticada para dados sensíveis |
+| 📦 **Sistema de Queue** | Enfileire cookies e envie todos de uma vez |
+| ⏰ **Forever Cookies** | Cookies persistentes de 400 dias (máximo do navegador) |
+| 🛡️ **Proteção contra ReDoS** | Validação de expressões regulares para prevenir ataques |
+| ✍️ **Consentimento HMAC** | Verificação criptográfica de consentimento (LGPD/GDPR) |
 | 🎯 **Interface Fluida** | API estática simples e intuitiva |
 | 📦 **Zero Dependências** | Nenhuma dependência externa em produção |
 | ✅ **98% Code Coverage** | Amplamente testado com PHPUnit e Infection |
@@ -51,7 +50,8 @@ Uma biblioteca PHP moderna, segura e elegante para gerenciamento de cookies. Pro
 
 ## 📌 Requisitos
 
-- PHP 8.0 ou superior
+- PHP 8.2 ou superior
+- Extensão OpenSSL (para criptografia)
 - Extensão `session` (para consentimento via sessão)
 
 ---
@@ -96,11 +96,11 @@ Cookie::delete('usuario');
 
 ## 📖 Documentação da API
 
-### `set($name, $value, $expiration, $path, $domain, $secure, $httpOnly, $sameSite)`
+### Operações Básicas
+
+#### `set($name, $value, $expiration, $path, $domain, $secure, $httpOnly, $sameSite)`
 
 Define um cookie com configurações de segurança.
-
-#### Parâmetros
 
 | Parâmetro | Tipo | Padrão | Descrição |
 |-----------|------|--------|-----------|
@@ -113,56 +113,31 @@ Define um cookie com configurações de segurança.
 | `$httpOnly` | `bool\|null` | `true` | Inacessível via JavaScript |
 | `$sameSite` | `string\|null` | `"Lax"` | Política SameSite (`Strict`, `Lax`, `None`) |
 
-#### Retorno
-
-`bool` - `true` se o cookie foi definido com sucesso.
-
-#### Exemplos
-
 ```php
-// Cookie de sessão (expira ao fechar navegador)
+// Cookie de sessão
 Cookie::set('session_token', 'abc123');
 
 // Cookie com expiração de 1 hora
 Cookie::set('carrinho', json_encode($itens), time() + 3600);
 
-// Cookie com expiração de 30 dias
-Cookie::set('lembrar_me', $token, time() + (30 * 24 * 60 * 60));
-
 // Cookie com todas as opções personalizadas
 Cookie::set(
     name: 'analytics_id',
     value: 'UA-12345',
-    expiration: time() + (365 * 24 * 60 * 60), // 1 ano
+    expiration: time() + (365 * 24 * 60 * 60),
     path: '/',
     domain: '.meusite.com.br',
     secure: true,
-    httpOnly: false,  // Acessível via JavaScript (analytics)
+    httpOnly: false,
     sameSite: 'Strict'
 );
-
-// Cookie para subdomínio específico
-Cookie::set('config', 'value', time() + 3600, '/admin', 'admin.meusite.com');
 ```
 
 ---
 
-### `get($name, $defaultValue)`
+#### `get($name, $defaultValue)`
 
 Obtém o valor de um cookie.
-
-#### Parâmetros
-
-| Parâmetro | Tipo | Padrão | Descrição |
-|-----------|------|--------|-----------|
-| `$name` | `string` | *obrigatório* | Nome do cookie |
-| `$defaultValue` | `mixed` | `null` | Valor retornado se o cookie não existir |
-
-#### Retorno
-
-`mixed` - Valor do cookie ou o valor padrão.
-
-#### Exemplos
 
 ```php
 // Obter cookie simples
@@ -170,14 +145,6 @@ $token = Cookie::get('auth_token');
 
 // Com valor padrão
 $idioma = Cookie::get('idioma', 'pt-BR');
-$tema = Cookie::get('tema', 'light');
-$itens_por_pagina = Cookie::get('itens_por_pagina', 10);
-
-// Verificando null
-$valor = Cookie::get('opcional');
-if ($valor === null) {
-    // Cookie não existe
-}
 ```
 
 > ⚠️ **Segurança XSS**: Sempre escape a saída ao exibir em HTML:
@@ -187,66 +154,21 @@ if ($valor === null) {
 
 ---
 
-### `exists($name)`
+#### `exists($name)`
 
 Verifica se um cookie existe.
 
-#### Parâmetros
-
-| Parâmetro | Tipo | Descrição |
-|-----------|------|-----------|
-| `$name` | `string` | Nome do cookie |
-
-#### Retorno
-
-`bool` - `true` se o cookie existe.
-
-#### Exemplos
-
 ```php
-// Verificação simples
 if (Cookie::exists('usuario_id')) {
     $usuario = carregarUsuario(Cookie::get('usuario_id'));
-}
-
-// Verificar múltiplos cookies
-$cookiesNecessarios = ['session', 'csrf_token', 'user_id'];
-$todosPresentes = true;
-
-foreach ($cookiesNecessarios as $cookie) {
-    if (!Cookie::exists($cookie)) {
-        $todosPresentes = false;
-        break;
-    }
-}
-
-// Padrão de autenticação
-if (!Cookie::exists('auth_token')) {
-    header('Location: /login');
-    exit;
 }
 ```
 
 ---
 
-### `delete($name, $path, $domain, $secure)`
+#### `delete($name, $path, $domain, $secure)`
 
 Remove um cookie.
-
-#### Parâmetros
-
-| Parâmetro | Tipo | Padrão | Descrição |
-|-----------|------|--------|-----------|
-| `$name` | `string` | *obrigatório* | Nome do cookie |
-| `$path` | `string` | `""` | Caminho do cookie (deve corresponder ao original) |
-| `$domain` | `string` | `""` | Domínio do cookie (deve corresponder ao original) |
-| `$secure` | `bool` | `false` | Flag secure (deve corresponder ao original) |
-
-#### Retorno
-
-`bool` - `true` se o cookie foi deletado com sucesso.
-
-#### Exemplos
 
 ```php
 // Deletar cookie simples
@@ -257,481 +179,395 @@ Cookie::delete('admin_session', '/admin');
 
 // Deletar cookie com domínio
 Cookie::delete('global_session', '/', '.meusite.com.br');
-
-// Deletar múltiplos cookies
-$cookiesParaDeletar = ['cart', 'wishlist', 'recently_viewed'];
-foreach ($cookiesParaDeletar as $cookie) {
-    Cookie::delete($cookie);
-}
-
-// Logout completo
-function logout(): void {
-    Cookie::delete('auth_token');
-    Cookie::delete('refresh_token');
-    Cookie::delete('user_preferences');
-    session_destroy();
-}
 ```
 
-> 💡 **Importante**: Para deletar um cookie com sucesso, os parâmetros `path` e `domain` devem corresponder aos valores usados quando o cookie foi criado.
+> 💡 **Importante**: Os parâmetros `path` e `domain` devem corresponder aos valores originais.
 
 ---
 
-### `getAllCookies()`
+#### `getAllCookies()`
 
 Retorna todos os cookies disponíveis.
 
-#### Retorno
-
-`array` - Array associativo com todos os cookies (`nome => valor`).
-
-#### Exemplos
-
 ```php
-// Listar todos os cookies
 $cookies = Cookie::getAllCookies();
-
 foreach ($cookies as $nome => $valor) {
     echo "{$nome}: {$valor}\n";
 }
-
-// Contar cookies
-$total = count(Cookie::getAllCookies());
-echo "Total de cookies: {$total}";
-
-// Verificar se há cookies
-if (empty(Cookie::getAllCookies())) {
-    echo "Nenhum cookie definido";
-}
-
-// Debug (apenas em desenvolvimento!)
-if ($_ENV['APP_DEBUG'] ?? false) {
-    print_r(Cookie::getAllCookies());
-}
 ```
 
 ---
 
-### `clearAllCookies()`
+#### `clearAllCookies()`
 
-Remove todos os cookies do domínio atual.
-
-#### Retorno
-
-`void`
-
-#### Exemplos
+Deleta todos os cookies do domínio atual.
 
 ```php
-// Limpar todos os cookies
+// Logout completo
 Cookie::clearAllCookies();
-
-// Uso em logout completo
-function logoutCompleto(): void {
-    // Limpar sessão
-    session_unset();
-    session_destroy();
-    
-    // Limpar todos os cookies
-    Cookie::clearAllCookies();
-    
-    // Redirecionar
-    header('Location: /');
-    exit;
-}
-
-// Resetar preferências do usuário
-function resetarPreferencias(): void {
-    Cookie::clearAllCookies();
-    
-    // Redefinir cookies padrão
-    Cookie::set('idioma', 'pt-BR');
-    Cookie::set('tema', 'light');
-}
+session_destroy();
 ```
-
-> ⚠️ **Atenção**: Este método remove TODOS os cookies, incluindo tokens de autenticação. Use com cautela.
 
 ---
 
-### `setCookieOptions($expiration, $path, $domain, $secure, $httpOnly, $sameSite)`
+### Criptografia
 
-Gera um array de opções compatível com `setcookie()` do PHP 7.3+.
+A biblioteca suporta criptografia AES-256-GCM para proteger dados sensíveis em cookies.
 
-#### Parâmetros
+#### `configureEncryption($key, $encryptByDefault, $except)`
+
+Configura as opções de criptografia.
 
 | Parâmetro | Tipo | Padrão | Descrição |
 |-----------|------|--------|-----------|
-| `$expiration` | `int\|null` | - | Timestamp de expiração |
-| `$path` | `string\|null` | - | Caminho |
-| `$domain` | `string\|null` | - | Domínio |
-| `$secure` | `bool\|null` | `false` | Flag Secure |
-| `$httpOnly` | `bool\|null` | `false` | Flag HttpOnly |
-| `$sameSite` | `string\|null` | `null` | Política SameSite |
-
-#### Retorno
-
-`array` - Array de opções filtrado (valores `null` são removidos).
-
-#### Exemplos
+| `$key` | `string` | *obrigatório* | Chave de criptografia (mínimo 32 bytes) |
+| `$encryptByDefault` | `bool` | `false` | Criptografar todos os cookies automaticamente |
+| `$except` | `array` | `[]` | Cookies a excluir da criptografia automática |
 
 ```php
-// Gerar opções para uso manual
-$options = Cookie::setCookieOptions(
-    expiration: time() + 3600,
-    path: '/',
-    domain: null,
-    secure: true,
-    httpOnly: true,
-    sameSite: 'Strict'
+// Configuração básica
+$key = 'sua-chave-de-32-bytes-ou-mais!!!';
+Cookie::configureEncryption($key);
+
+// Criptografar todos os cookies automaticamente
+Cookie::configureEncryption($key, encryptByDefault: true);
+
+// Criptografar todos exceto alguns
+Cookie::configureEncryption(
+    key: $key,
+    encryptByDefault: true,
+    except: ['session_id', 'csrf_token', 'locale']
 );
-
-// Resultado:
-// [
-//     'expires' => 1735123456,
-//     'path' => '/',
-//     'secure' => true,
-//     'httponly' => true,
-//     'samesite' => 'Strict'
-// ]
-
-// Usar com setcookie nativo
-setcookie('meu_cookie', 'valor', $options);
-
-// Opções mínimas
-$minimalOptions = Cookie::setCookieOptions(
-    expiration: null,
-    path: '/api',
-    domain: null,
-    secure: null,
-    httpOnly: null,
-    sameSite: null
-);
-// Resultado: ['path' => '/api']
 ```
 
 ---
 
-### `checkCookieConsent()`
+#### `setEncrypted($name, $value, ...)`
 
-Verifica se o usuário deu consentimento para armazenar cookies (LGPD/GDPR).
-
-#### Retorno
-
-`bool` - `true` se o consentimento foi dado e é válido.
-
-#### Métodos de Verificação
-
-1. **Via Sessão**: Verifica `$_SESSION['cookie_consent'] === true`
-2. **Via Cookie Assinado**: Verifica assinatura HMAC do cookie de consentimento
-
-#### Exemplos
+Define um cookie com valor criptografado explicitamente.
 
 ```php
-// Verificação simples
+Cookie::configureEncryption($key);
+
+// O valor será criptografado automaticamente
+Cookie::setEncrypted('user_data', json_encode([
+    'id' => 123,
+    'email' => 'usuario@email.com',
+    'role' => 'admin'
+]));
+```
+
+---
+
+#### `getDecrypted($name, $defaultValue)`
+
+Obtém e descriptografa um cookie.
+
+```php
+$userData = Cookie::getDecrypted('user_data');
+if ($userData !== null) {
+    $data = json_decode($userData, true);
+    echo "Bem-vindo, {$data['email']}!";
+}
+
+// Com valor padrão
+$settings = Cookie::getDecrypted('settings', '{}');
+```
+
+---
+
+#### `encrypt($value)` / `decrypt($value)`
+
+Métodos de baixo nível para criptografar/descriptografar valores.
+
+```php
+Cookie::configureEncryption($key);
+
+// Criptografar manualmente
+$encrypted = Cookie::encrypt('dado sensível');
+
+// Descriptografar
+$decrypted = Cookie::decrypt($encrypted);
+// Retorna null se a descriptografia falhar
+```
+
+---
+
+### Sistema de Queue
+
+O sistema de queue permite enfileirar múltiplos cookies e enviá-los todos de uma vez. Isso é útil para:
+- Definir múltiplos cookies em uma única operação
+- Preparar cookies durante o processamento e enviar no final
+- Gerenciar cookies em middlewares
+
+#### `queue($name, $value, ...)`
+
+Adiciona um cookie à fila.
+
+```php
+// Enfileirar múltiplos cookies
+Cookie::queue('user_id', '123');
+Cookie::queue('session_token', 'abc123');
+Cookie::queue('preferences', 'dark_mode=true');
+```
+
+---
+
+#### `queueEncrypted($name, $value, ...)`
+
+Adiciona um cookie criptografado à fila.
+
+```php
+Cookie::configureEncryption($key);
+
+Cookie::queueEncrypted('sensitive_data', json_encode([
+    'credit_card_last4' => '4242',
+    'payment_method' => 'visa'
+]));
+```
+
+---
+
+#### `queueForever($name, $value, ...)`
+
+Adiciona um cookie "forever" (400 dias) à fila.
+
+```php
+Cookie::queueForever('remember_me', $token);
+```
+
+---
+
+#### `queueDelete($name, $path, $domain)`
+
+Enfileira a remoção de um cookie.
+
+```php
+Cookie::queueDelete('old_session');
+Cookie::queueDelete('legacy_cookie', '/old-path');
+```
+
+---
+
+#### `sendQueued()`
+
+Envia todos os cookies da fila.
+
+```php
+// Enfileirar cookies durante o processamento
+Cookie::queue('analytics', 'page_view');
+Cookie::queue('cart_count', '5');
+Cookie::queueEncrypted('user_token', $token);
+
+// Enviar todos ao final
+Cookie::sendQueued();
+```
+
+---
+
+#### Outros métodos de queue
+
+```php
+// Verificar se um cookie está na fila
+if (Cookie::hasQueued('user_id')) {
+    // ...
+}
+
+// Obter dados de um cookie enfileirado
+$queued = Cookie::getQueued('user_id');
+// ['value' => '123', 'options' => [...]]
+
+// Obter todos os cookies enfileirados
+$all = Cookie::getAllQueued();
+
+// Remover um cookie da fila
+Cookie::unqueue('user_id');
+
+// Limpar a fila sem enviar
+Cookie::flushQueue();
+
+// Contar cookies na fila
+$count = Cookie::queueCount();
+```
+
+---
+
+### Cookie Forever
+
+#### `forever($name, $value, ...)`
+
+Define um cookie com expiração de 400 dias (máximo permitido pelos navegadores).
+
+```php
+// Cookie persistente para "lembrar-me"
+Cookie::forever('remember_token', $token);
+
+// Equivalente a:
+Cookie::set('remember_token', $token, time() + (400 * 24 * 60 * 60));
+```
+
+---
+
+### Consentimento
+
+#### `checkCookieConsent()`
+
+Verifica se o usuário deu consentimento para cookies (LGPD/GDPR).
+
+Suporta dois métodos:
+1. **Sessão PHP**: `$_SESSION['cookie_consent'] === true`
+2. **Cookie com HMAC**: Cookie `cookie_consent` com assinatura válida
+
+```php
 if (Cookie::checkCookieConsent()) {
-    // Usuário consentiu - pode usar cookies de analytics, marketing, etc.
-    Cookie::set('analytics_enabled', 'true');
-    carregarGoogleAnalytics();
-} else {
-    // Mostrar banner de consentimento
-    exibirBannerCookies();
-}
-
-// Middleware de consentimento
-class CookieConsentMiddleware
-{
-    public function handle($request, $next)
-    {
-        if (!Cookie::checkCookieConsent()) {
-            // Apenas cookies essenciais
-            $request->setAttribute('cookies_limitados', true);
-        }
-        
-        return $next($request);
-    }
-}
-
-// Categorização de cookies
-function podeUsarCookie(string $categoria): bool
-{
-    return match ($categoria) {
-        'essencial' => true, // Sempre permitido
-        'funcional', 'analytics', 'marketing' => Cookie::checkCookieConsent(),
-        default => false,
-    };
+    // Pode definir cookies de analytics/marketing
+    Cookie::set('analytics', 'enabled');
 }
 ```
 
 ---
 
-### `getCookieValueByRegex($regex)`
+### Operações com Regex
+
+#### `getCookieValueByRegex($regex)`
 
 Obtém valores de cookies que correspondem a um padrão regex.
 
-#### Parâmetros
-
-| Parâmetro | Tipo | Descrição |
-|-----------|------|-----------|
-| `$regex` | `string` | Expressão regular válida (com delimitadores) |
-
-#### Retorno
-
-`array` - Array com os valores dos cookies correspondentes.
-
-#### Exceções
-
-- `InvalidArgumentException` - Regex vazio, muito longo, inválido ou potencialmente inseguro
-
-#### Exemplos
-
 ```php
 // Buscar todos os cookies de usuário
-$userCookies = Cookie::getCookieValueByRegex('/^user_/');
+$valores = Cookie::getCookieValueByRegex('/^user_/');
 
-// Buscar cookies de carrinho
-$cartCookies = Cookie::getCookieValueByRegex('/^cart_item_\d+$/');
-
-// Buscar cookies de sessão temporária
-$tempCookies = Cookie::getCookieValueByRegex('/^temp_/i');
-
-// Buscar por prefixo específico
-$analyticsCookies = Cookie::getCookieValueByRegex('/^_ga/');
-
-// Uso prático: carregar itens do carrinho
-$itensCarrinho = [];
-foreach (Cookie::getCookieValueByRegex('/^cart_/') as $item) {
-    $itensCarrinho[] = json_decode($item, true);
-}
+// Buscar cookies de sessão
+$sessoes = Cookie::getCookieValueByRegex('/^sess_[a-f0-9]+$/');
 ```
 
 ---
 
-### `deleteCookiesByRegex($regex)`
+#### `deleteCookiesByRegex($regex)`
 
 Remove todos os cookies que correspondem a um padrão regex.
 
-#### Parâmetros
-
-| Parâmetro | Tipo | Descrição |
-|-----------|------|-----------|
-| `$regex` | `string` | Expressão regular válida (com delimitadores) |
-
-#### Retorno
-
-`bool` - `true` se todos os cookies foram deletados com sucesso.
-
-#### Exceções
-
-- `InvalidArgumentException` - Regex vazio, muito longo, inválido ou potencialmente inseguro
-
-#### Exemplos
-
 ```php
-// Limpar todos os cookies temporários
-Cookie::deleteCookiesByRegex('/^temp_/');
+// Deletar todos os cookies de tracking
+Cookie::deleteCookiesByRegex('/^tracking_/');
 
-// Limpar cookies de analytics
-Cookie::deleteCookiesByRegex('/^(_ga|_gid|_gat)/');
-
-// Limpar itens do carrinho
-Cookie::deleteCookiesByRegex('/^cart_item_/');
-
-// Limpar cookies de um módulo específico
-Cookie::deleteCookiesByRegex('/^module_checkout_/');
-
-// Limpar preferências antigas (migração)
-Cookie::deleteCookiesByRegex('/^old_pref_/');
-
-// Limpeza seletiva por padrão numérico
-Cookie::deleteCookiesByRegex('/^session_\d{4,}$/');
+// Limpar cookies temporários
+Cookie::deleteCookiesByRegex('/^tmp_/');
 ```
 
 ---
 
 ## 🔐 Guia de Segurança
 
-### Flags de Segurança Padrão
+### Configurações Padrão Seguras
 
-| Flag | Valor Padrão | Proteção |
-|------|--------------|----------|
-| `Secure` | `true` | Cookie só é enviado via HTTPS |
-| `HttpOnly` | `true` | Cookie inacessível via JavaScript (proteção XSS) |
-| `SameSite` | `Lax` | Proteção contra CSRF |
+| Opção | Padrão | Motivo |
+|-------|--------|--------|
+| `secure` | `true` | Previne transmissão em conexões não-HTTPS |
+| `httpOnly` | `true` | Previne acesso via JavaScript (XSS) |
+| `sameSite` | `Lax` | Previne CSRF em requisições cross-site |
 
-### Valores de SameSite
+### Recomendações
 
-| Valor | Quando Usar |
-|-------|-------------|
-| `Strict` | Máxima segurança. Cookie não é enviado em requisições cross-site. |
-| `Lax` | **(Recomendado)** Cookie enviado apenas em navegações top-level. |
-| `None` | Cookie enviado em todas as requisições. **Requer `Secure=true`**. |
+1. **Use HTTPS em produção** - Cookies com `secure=true` só funcionam via HTTPS
 
-### Boas Práticas
+2. **Escape output HTML** - Sempre sanitize antes de exibir:
+   ```php
+   echo htmlspecialchars(Cookie::get('name', ''), ENT_QUOTES, 'UTF-8');
+   ```
 
-```php
-// ✅ Cookie de autenticação seguro
-Cookie::set(
-    'auth_token',
-    $token,
-    time() + 3600,
-    '/',
-    '',
-    true,      // Secure
-    true,      // HttpOnly
-    'Strict'   // SameSite mais restritivo
-);
+3. **Use criptografia para dados sensíveis**:
+   ```php
+   Cookie::configureEncryption($key);
+   Cookie::setEncrypted('user_data', $sensitiveData);
+   ```
 
-// ✅ Cookie de preferência (pode ser acessado via JS)
-Cookie::set(
-    'ui_theme',
-    'dark',
-    time() + (365 * 24 * 60 * 60),
-    '/',
-    '',
-    true,
-    false,     // HttpOnly = false (JS precisa ler)
-    'Lax'
-);
+4. **Configure chave de criptografia forte**:
+   ```php
+   // Gere uma chave segura
+   $key = bin2hex(random_bytes(32)); // 64 caracteres hex
+   ```
 
-// ⚠️ Cookie para integração cross-site (usar com cautela)
-Cookie::set(
-    'third_party_integration',
-    $value,
-    time() + 3600,
-    '/',
-    '',
-    true,      // OBRIGATÓRIO quando SameSite=None
-    true,
-    'None'
-);
-```
-
-### Proteção XSS na Saída
-
-```php
-// ❌ INCORRETO - Vulnerável a XSS
-echo "Olá, " . Cookie::get('nome');
-
-// ✅ CORRETO - Sempre escape a saída
-echo "Olá, " . htmlspecialchars(Cookie::get('nome', ''), ENT_QUOTES, 'UTF-8');
-
-// ✅ CORRETO - Usando template engine (Twig, Blade, etc.)
-// Twig: {{ cookie_nome|e }}
-// Blade: {{ $cookieNome }}
-```
+5. **Armazene a chave de forma segura**:
+   ```php
+   // Use variáveis de ambiente
+   $key = getenv('COOKIE_ENCRYPTION_KEY');
+   Cookie::configureEncryption($key);
+   ```
 
 ---
 
-## 🛡️ Consentimento de Cookies (LGPD/GDPR)
+## 📋 Consentimento de Cookies (LGPD/GDPR)
 
-A biblioteca oferece um mecanismo robusto de verificação de consentimento usando assinatura HMAC.
+### Via Sessão PHP
 
-### Configuração
+```php
+session_start();
 
-**1. Defina a chave secreta** (variável de ambiente):
+// Quando usuário aceitar
+$_SESSION['cookie_consent'] = true;
+
+// Verificar
+if (Cookie::checkCookieConsent()) {
+    // OK para definir cookies não-essenciais
+}
+```
+
+### Via Cookie com HMAC
+
+Configure a variável de ambiente:
 
 ```bash
-# .env
-COOKIE_CONSENT_SECRET="sua-chave-secreta-muito-longa-e-aleatoria-min-32-chars"
+export COOKIE_CONSENT_SECRET="sua-chave-secreta-aqui"
 ```
 
-**2. Quando o usuário aceitar os cookies:**
-
 ```php
-<?php
+$secret = getenv('COOKIE_CONSENT_SECRET');
 
-use omegaalfa\Cookie\Cookie;
+// Quando usuário aceitar
+Cookie::set('cookie_consent', 'true');
+Cookie::set('cookie_consent_signature', hash_hmac('sha256', 'cookie_consent:true', $secret));
 
-function aceitarCookies(): void
-{
-    $secret = getenv('COOKIE_CONSENT_SECRET');
-    $expiracao = time() + (365 * 24 * 60 * 60); // 1 ano
-    
-    // Cookie de consentimento
-    Cookie::set('cookie_consent', 'true', $expiracao);
-    
-    // Assinatura HMAC (prova criptográfica)
-    $assinatura = hash_hmac('sha256', 'cookie_consent:true', $secret);
-    Cookie::set('cookie_consent_signature', $assinatura, $expiracao);
-}
-```
-
-**3. Verificar consentimento:**
-
-```php
+// Verificar
 if (Cookie::checkCookieConsent()) {
-    // Consentimento válido e verificado criptograficamente
-    inicializarAnalytics();
-    inicializarMarketing();
-} else {
-    // Apenas cookies essenciais
-    exibirBannerConsentimento();
+    // Consentimento verificado criptograficamente
 }
-```
-
-### Por que usar HMAC?
-
-O HMAC impede que usuários mal-intencionados forjem o consentimento:
-
-```php
-// ❌ Atacante tenta forjar (não funciona)
-$_COOKIE['cookie_consent'] = 'true';
-$_COOKIE['cookie_consent_signature'] = 'valor_inventado';
-// checkCookieConsent() retorna FALSE - assinatura inválida
-
-// ✅ Apenas consentimento legítimo funciona
-// Assinatura gerada com a chave secreta do servidor
 ```
 
 ---
 
 ## 🧪 Testes
 
-### Executar Testes Unitários
-
 ```bash
+# Executar testes
 composer test
-# ou
-vendor/bin/phpunit
-```
 
-### Executar com Cobertura
+# Com cobertura
+composer test:coverage
 
-```bash
-vendor/bin/phpunit --coverage-text
-```
-
-### Executar Testes de Mutação
-
-```bash
-vendor/bin/infection
-```
-
-### Executar Análise Estática
-
-```bash
-vendor/bin/phpstan analyse
+# Mutation testing
+composer test:mutation
 ```
 
 ---
 
 ## 🤝 Contribuindo
 
-Contribuições são muito bem-vindas! Por favor:
-
-1. Faça um fork do repositório
-2. Crie uma branch para sua feature (`git checkout -b feature/nova-funcionalidade`)
-3. Commit suas mudanças (`git commit -m 'feat: adiciona nova funcionalidade'`)
-4. Push para a branch (`git push origin feature/nova-funcionalidade`)
+1. Fork o repositório
+2. Crie sua branch: `git checkout -b feature/nova-funcionalidade`
+3. Commit suas mudanças: `git commit -m 'feat: adiciona nova funcionalidade'`
+4. Push para a branch: `git push origin feature/nova-funcionalidade`
 5. Abra um Pull Request
 
-### Padrões
+### Padrão de Commits
 
-- Siga o PSR-12 para estilo de código
-- Adicione testes para novas funcionalidades
-- Mantenha a cobertura de código acima de 90%
-- Use [Conventional Commits](https://www.conventionalcommits.org/)
+Usamos [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` - Nova funcionalidade
+- `fix:` - Correção de bug
+- `docs:` - Documentação
+- `test:` - Testes
+- `refactor:` - Refatoração
 
 ---
 
@@ -741,6 +577,23 @@ Este projeto está licenciado sob a [Licença MIT](LICENSE).
 
 ---
 
+## 📊 Comparação de Funcionalidades
+
+| Recurso | omegaalfa/cookie | illuminate/cookie | spatie/laravel-cookie-consent |
+|---------|------------------|-------------------|-------------------------------|
+| Zero Dependências | ✅ | ❌ | ❌ |
+| Criptografia AES-256-GCM | ✅ | ✅ | ❌ |
+| Sistema de Queue | ✅ | ✅ | ❌ |
+| Forever Cookies | ✅ | ✅ | ❌ |
+| Proteção ReDoS | ✅ | ❌ | ❌ |
+| Consentimento LGPD/GDPR | ✅ | ❌ | ✅ |
+| Verificação HMAC | ✅ | ❌ | ❌ |
+| Secure por Padrão | ✅ | ✅ | N/A |
+| Standalone (sem framework) | ✅ | ❌ | ❌ |
+| PHP 8.2+ Nativo | ✅ | ✅ | ✅ |
+
+---
+
 <p align="center">
-  Desenvolvido com ❤️ por <a href="https://github.com/omegaalfa">Omega Alfa</a>
+  Feito com ❤️ por <a href="https://github.com/omegaalfa">Omega Alfa</a>
 </p>

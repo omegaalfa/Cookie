@@ -1,8 +1,18 @@
 {
   "name": "omegaalfa/cookie",
-  "description": "Class for operations with cookies in PHP",
+  "description": "Secure PHP cookie management with AES-256-GCM encryption and queue support",
   "type": "library",
   "license": "MIT",
+  "keywords": [
+    "cookie",
+    "cookies",
+    "encryption",
+    "security",
+    "queue",
+    "php",
+    "lgpd",
+    "gdpr"
+  ],
   "autoload": {
     "psr-4": {
       "omegaalfa\\Cookie\\": "src/"
@@ -14,7 +24,8 @@
     }
   },
   "require": {
-    "php": "^8.2"
+    "php": "^8.2",
+    "ext-openssl": "*"
   },
   "require-dev": {
     "phpunit/phpunit": "^10.0 || ^12.0",
@@ -22,7 +33,9 @@
     "infection/infection": "^0.29"
   },
   "scripts": {
-    "test": "phpunit"
+    "test": "phpunit",
+    "test:coverage": "phpunit --coverage-text",
+    "test:mutation": "infection --threads=4"
   },
   "minimum-stability": "stable",
   "config": {

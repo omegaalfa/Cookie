@@ -1,127 +1,369 @@
 <?php
 
-
 declare(strict_types=1);
-
 
 namespace omegaalfa\Cookie;
 
-
+/**
+ * Interface CookieInterface
+ *
+ * Defines the contract for cookie management operations.
+ *
+ * @package omegaalfa\Cookie
+ */
 interface CookieInterface
 {
+    // =========================================================================
+    // CONFIGURATION
+    // =========================================================================
+
     /**
-     * Define um cookie.
+     * Configure encryption settings
      *
-     * @param string $name O nome do cookie.
-     * @param string $value O valor do cookie.
-     * @param int|null $expiration O tempo de expiração do cookie em segundos. 0 significa "quando o navegador for fechado".
-     * @param string $path O caminho no servidor para o qual o cookie é válido.
-     * @param string $domain O domínio para o qual o cookie é válido.
-     * @param bool $secure Indica se o cookie deve ser enviado apenas sobre uma conexão segura.
-     * @param bool $httpOnly Indica se o cookie deve ser acessível apenas através do protocolo HTTP.
-     * @param string|null $sameSite A política SameSite do cookie.
+     * @param string $key The encryption key (must be at least 32 bytes for AES-256)
+     * @param bool $encryptByDefault Whether to encrypt all cookies by default
+     * @param array<string> $except Cookie names to exclude from automatic encryption
+     * @return void
+     */
+    public static function configureEncryption(
+        string $key,
+        bool $encryptByDefault = false,
+        array $except = []
+    ): void;
+
+    // =========================================================================
+    // BASIC COOKIE OPERATIONS
+    // =========================================================================
+
+    /**
+     * Set a cookie with secure defaults
      *
-     * @return bool Retorna true se o cookie foi definido com sucesso.
+     * @param string $name Cookie name
+     * @param string $value Cookie value
+     * @param int|null $expiration Unix timestamp for expiration (0 = session)
+     * @param string|null $path Path where cookie is valid
+     * @param string|null $domain Domain where cookie is valid
+     * @param bool|null $secure Send only over HTTPS
+     * @param bool|null $httpOnly Inaccessible via JavaScript
+     * @param string|null $sameSite SameSite policy (Strict, Lax, None)
+     * @return bool
      */
     public static function set(
-        string  $name,
-        string  $value,
-        ?int    $expiration = null,
-        string  $path = "/",
-        string  $domain = "",
-        bool    $secure = false,
-        bool    $httpOnly = false,
+        string $name,
+        string $value,
+        ?int $expiration = null,
+        ?string $path = "/",
+        ?string $domain = "",
+        ?bool $secure = true,
+        ?bool $httpOnly = true,
         ?string $sameSite = null
     ): bool;
 
     /**
-     * Obtém o valor de um cookie.
+     * Set a cookie with explicit encryption
      *
-     * @param string $name O nome do cookie.
-     * @param mixed $defaultValue O valor padrão a ser retornado se o cookie não existir.
+     * @param string $name Cookie name
+     * @param string $value Cookie value (will be encrypted)
+     * @param int|null $expiration Unix timestamp for expiration
+     * @param string|null $path Path where cookie is valid
+     * @param string|null $domain Domain where cookie is valid
+     * @param bool|null $secure Send only over HTTPS
+     * @param bool|null $httpOnly Inaccessible via JavaScript
+     * @param string|null $sameSite SameSite policy
+     * @return bool
+     */
+    public static function setEncrypted(
+        string $name,
+        string $value,
+        ?int $expiration = null,
+        ?string $path = "/",
+        ?string $domain = "",
+        ?bool $secure = true,
+        ?bool $httpOnly = true,
+        ?string $sameSite = null
+    ): bool;
+
+    /**
+     * Set a cookie that lasts "forever" (400 days)
      *
-     * @return mixed O valor do cookie se ele existir, ou o valor padrão se não existir.
+     * @param string $name Cookie name
+     * @param string $value Cookie value
+     * @param string|null $path Path where cookie is valid
+     * @param string|null $domain Domain where cookie is valid
+     * @param bool|null $secure Send only over HTTPS
+     * @param bool|null $httpOnly Inaccessible via JavaScript
+     * @param string|null $sameSite SameSite policy
+     * @return bool
+     */
+    public static function forever(
+        string $name,
+        string $value,
+        ?string $path = "/",
+        ?string $domain = "",
+        ?bool $secure = true,
+        ?bool $httpOnly = true,
+        ?string $sameSite = null
+    ): bool;
+
+    /**
+     * Get cookie value
+     *
+     * @param string $name Cookie name
+     * @param mixed $defaultValue Default value if cookie doesn't exist
+     * @return mixed
      */
     public static function get(string $name, mixed $defaultValue = null): mixed;
 
     /**
-     * Deleta um cookie.
+     * Get and decrypt a cookie value
      *
-     * @param string $name O nome do cookie.
-     * @param string $path O caminho no servidor para o qual o cookie é válido.
-     * @param string $domain O domínio para o qual o cookie é válido.
-     * @param bool $secure Indica se o cookie deve ser enviado apenas sobre uma conexão segura.
-     *
-     * @return bool Retorna true se o cookie foi deletado com sucesso.
+     * @param string $name Cookie name
+     * @param mixed $defaultValue Default value if cookie doesn't exist or decryption fails
+     * @return mixed
      */
-    public static function delete(string $name, string $path = '', string $domain = '', bool $secure = false): bool;
+    public static function getDecrypted(string $name, mixed $defaultValue = null): mixed;
 
     /**
-     * Verifica se um cookie existe.
+     * Check if a cookie exists
      *
-     * @param string $name O nome do cookie.
-     *
-     * @return bool Retorna true se o cookie existir.
+     * @param string $name Cookie name
+     * @return bool
      */
     public static function exists(string $name): bool;
 
     /**
-     * Retorna um array de todos os cookies definidos para o domínio atual.
+     * Delete a cookie
      *
-     * @return array Todos os cookies definidos.
+     * @param string $name Cookie name
+     * @param string $path Path (must match original)
+     * @param string $domain Domain (must match original)
+     * @param bool $secure Secure flag (must match original)
+     * @return bool
+     */
+    public static function delete(string $name, string $path = '', string $domain = '', bool $secure = false): bool;
+
+    /**
+     * Get all cookies for the current domain
+     *
+     * @return array
      */
     public static function getAllCookies(): array;
 
     /**
-     * Deleta todos os cookies definidos para o domínio atual.
+     * Delete all cookies for the current domain
      *
      * @return void
      */
     public static function clearAllCookies(): void;
 
+    // =========================================================================
+    // QUEUE SYSTEM
+    // =========================================================================
+
     /**
-     * Verifica se o usuário deu consentimento para armazenar cookies.
+     * Add a cookie to the queue
      *
-     * @return bool Retorna true se o consentimento foi dado.
+     * @param string $name Cookie name
+     * @param string $value Cookie value
+     * @param int|null $expiration Unix timestamp for expiration
+     * @param string|null $path Path where cookie is valid
+     * @param string|null $domain Domain where cookie is valid
+     * @param bool|null $secure Send only over HTTPS
+     * @param bool|null $httpOnly Inaccessible via JavaScript
+     * @param string|null $sameSite SameSite policy
+     * @return void
+     */
+    public static function queue(
+        string $name,
+        string $value,
+        ?int $expiration = null,
+        ?string $path = "/",
+        ?string $domain = "",
+        ?bool $secure = true,
+        ?bool $httpOnly = true,
+        ?string $sameSite = null
+    ): void;
+
+    /**
+     * Add an encrypted cookie to the queue
+     *
+     * @param string $name Cookie name
+     * @param string $value Cookie value (will be encrypted)
+     * @param int|null $expiration Unix timestamp for expiration
+     * @param string|null $path Path where cookie is valid
+     * @param string|null $domain Domain where cookie is valid
+     * @param bool|null $secure Send only over HTTPS
+     * @param bool|null $httpOnly Inaccessible via JavaScript
+     * @param string|null $sameSite SameSite policy
+     * @return void
+     */
+    public static function queueEncrypted(
+        string $name,
+        string $value,
+        ?int $expiration = null,
+        ?string $path = "/",
+        ?string $domain = "",
+        ?bool $secure = true,
+        ?bool $httpOnly = true,
+        ?string $sameSite = null
+    ): void;
+
+    /**
+     * Add a "forever" cookie to the queue (400 days)
+     *
+     * @param string $name Cookie name
+     * @param string $value Cookie value
+     * @param string|null $path Path where cookie is valid
+     * @param string|null $domain Domain where cookie is valid
+     * @param bool|null $secure Send only over HTTPS
+     * @param bool|null $httpOnly Inaccessible via JavaScript
+     * @param string|null $sameSite SameSite policy
+     * @return void
+     */
+    public static function queueForever(
+        string $name,
+        string $value,
+        ?string $path = "/",
+        ?string $domain = "",
+        ?bool $secure = true,
+        ?bool $httpOnly = true,
+        ?string $sameSite = null
+    ): void;
+
+    /**
+     * Queue a cookie for deletion
+     *
+     * @param string $name Cookie name
+     * @param string $path Path (must match original)
+     * @param string $domain Domain (must match original)
+     * @return void
+     */
+    public static function queueDelete(string $name, string $path = '/', string $domain = ''): void;
+
+    /**
+     * Remove a cookie from the queue
+     *
+     * @param string $name Cookie name
+     * @return void
+     */
+    public static function unqueue(string $name): void;
+
+    /**
+     * Check if a cookie is queued
+     *
+     * @param string $name Cookie name
+     * @return bool
+     */
+    public static function hasQueued(string $name): bool;
+
+    /**
+     * Get a queued cookie's data
+     *
+     * @param string $name Cookie name
+     * @return array{value: string, options: array}|null
+     */
+    public static function getQueued(string $name): ?array;
+
+    /**
+     * Get all queued cookies
+     *
+     * @return array<string, array{value: string, options: array}>
+     */
+    public static function getAllQueued(): array;
+
+    /**
+     * Send all queued cookies
+     *
+     * @return bool
+     */
+    public static function sendQueued(): bool;
+
+    /**
+     * Clear the cookie queue without sending
+     *
+     * @return void
+     */
+    public static function flushQueue(): void;
+
+    /**
+     * Get the number of cookies in the queue
+     *
+     * @return int
+     */
+    public static function queueCount(): int;
+
+    // =========================================================================
+    // ENCRYPTION
+    // =========================================================================
+
+    /**
+     * Encrypt a value using AES-256-GCM
+     *
+     * @param string $value Value to encrypt
+     * @return string Base64 encoded encrypted value
+     */
+    public static function encrypt(string $value): string;
+
+    /**
+     * Decrypt a value
+     *
+     * @param string $encryptedValue Base64 encoded encrypted value
+     * @return string|null Decrypted value or null if decryption fails
+     */
+    public static function decrypt(string $encryptedValue): ?string;
+
+    // =========================================================================
+    // CONSENT VERIFICATION
+    // =========================================================================
+
+    /**
+     * Check if user has given consent to store cookies
+     *
+     * @return bool
      */
     public static function checkCookieConsent(): bool;
 
+    // =========================================================================
+    // REGEX OPERATIONS
+    // =========================================================================
+
     /**
-     * Retorna um array de valores de cookie que correspondem a uma expressão regular dada.
+     * Get cookie values that match a regular expression
      *
-     * @param string $regex A expressão regular para corresponder aos nomes dos cookies.
-     *
-     * @return array Os valores dos cookies que correspondem à expressão regular.
+     * @param string $regex Regular expression pattern
+     * @return array
      */
     public static function getCookieValueByRegex(string $regex): array;
 
     /**
-     * Deleta todos os cookies que correspondem a uma expressão regular dada.
+     * Delete all cookies that match a regular expression
      *
-     * @param string $regex A expressão regular para corresponder aos nomes dos cookies.
-     *
-     * @return bool Retorna true se todos os cookies correspondentes foram deletados com sucesso.
+     * @param string $regex Regular expression pattern
+     * @return bool
      */
     public static function deleteCookiesByRegex(string $regex): bool;
 
+    // =========================================================================
+    // OPTIONS BUILDER
+    // =========================================================================
+
     /**
-     * Seta a opções de configuração do cookie
+     * Build cookie options array
      *
-     * @param int|null $expiration
-     * @param string|null $path
-     * @param string|null $domain
-     * @param bool|null $secure
-     * @param bool|null $httpOnly
-     * @param string|null $sameSite
-     *
+     * @param int|null $expiration Unix timestamp for expiration
+     * @param string|null $path Path where cookie is valid
+     * @param string|null $domain Domain where cookie is valid
+     * @param bool|null $secure Send only over HTTPS
+     * @param bool|null $httpOnly Inaccessible via JavaScript
+     * @param string|null $sameSite SameSite policy
      * @return array
      */
     public static function setCookieOptions(
-        int|null    $expiration,
-        string|null $path,
-        string|null $domain,
-        bool|null   $secure = false,
-        bool|null   $httpOnly = false,
-        null|string $sameSite = null
+        ?int $expiration,
+        ?string $path,
+        ?string $domain,
+        ?bool $secure = false,
+        ?bool $httpOnly = false,
+        ?string $sameSite = null
     ): array;
 }
