@@ -1,6 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace omegaalfa\Cookie;
+
+use InvalidArgumentException;
 
 /**
  * Class Cookie
@@ -9,269 +13,266 @@ namespace omegaalfa\Cookie;
  */
 class Cookie implements CookieInterface
 {
-	/**
-	 * Ex. Cookie::set('theme', 'red');
-	 * setcookie('SID', '31d4d96e407aad42', time() + 3600, '/~rasmus/', 'example.com', true, true, 'Strict');
-	 * @param  string       $name
-	 * @param  string       $value
-	 * @param  int|null     $expiration
-	 * @param  string       $path
-	 * @param  string       $domain
-	 * @param  bool         $secure
-	 * @param  bool         $httpOnly
-	 * @param  string|null  $sameSite
-	 *
-	 * @return bool
-	 */
-	public static function set(
-		string $name,
-		string $value,
-		int|null $expiration = 0,
-		string|null $path = "/",
-		string|null $domain = "",
-		bool|null $secure = false,
-		bool|null $httpOnly = false,
-		null|string $sameSite = null
-	): bool {
-		return setcookie($name, $value, self::setCookieOptions($expiration, $path, $domain, $secure, $httpOnly, $sameSite));
-	}
+    private const DEFAULT_SAMESITE = 'Lax';
+    private const CONSENT_COOKIE = 'cookie_consent';
+    private const CONSENT_SIGNATURE_COOKIE = 'cookie_consent_signature';
+    private const COOKIE_CONSENT_HMAC_KEY = 'cookie_consent:true';
+    private const SAFE_REGEX_MAX_LENGTH = 255;
 
-	/**
-	 * @param  int|null     $expiration
-	 * @param  string       $path
-	 * @param  string       $domain
-	 * @param  bool         $secure
-	 * @param  bool         $httpOnly
-	 * @param  string|null  $sameSite
-	 *
-	 * @return array
-	 */
-	public static function setCookieOptions(
-		int|null $expiration,
-		string|null $path,
-		string|null $domain,
-		bool|null $secure = false,
-		bool|null $httpOnly = false,
-		null|string $sameSite = null
-	): array {
-		$options = [
-			'expires'  => $expiration,
-			'path'     => $path,
-			'domain'   => $domain,
-			'secure'   => $secure,
-			'httponly' => $httpOnly,
-			'samesite' => $sameSite,
-		];
+    /**
+     *  Ex. Cookie::set('theme', 'red');
+     *  setcookie('SID', '31d4d96e407aad42', time() + 3600, '/~rasmus/', 'example.com', true, true, 'Strict');
+     *
+     * @param string $name
+     * @param string $value
+     * @param int|null $expiration
+     * @param string|null $path
+     * @param string|null $domain
+     * @param bool|null $secure
+     * @param bool|null $httpOnly
+     * @param string|null $sameSite
+     * @return bool
+     */
+    public static function set(
+        string      $name,
+        string      $value,
+        int|null    $expiration = 0,
+        string|null $path = "/",
+        string|null $domain = "",
+        bool|null   $secure = true,
+        bool|null   $httpOnly = true,
+        string|null $sameSite = self::DEFAULT_SAMESITE
+    ): bool
+    {
+        $options = self::setCookieOptions($expiration, $path, $domain, $secure, $httpOnly, $sameSite ?? self::DEFAULT_SAMESITE);
 
-		foreach($options as $key => $option){
-			if(!$option){
-				unset($options[$key]);
-			}
-		}
+        return setcookie($name, $value, $options);
+    }
 
-		return $options;
-	}
+    /**
+     * @param int|null $expiration
+     * @param string|null $path
+     * @param string|null $domain
+     * @param bool|null $secure
+     * @param bool|null $httpOnly
+     * @param string|null $sameSite
+     * @return array
+     */
+    public static function setCookieOptions(
+        int|null    $expiration,
+        string|null $path,
+        string|null $domain,
+        bool|null   $secure = false,
+        bool|null   $httpOnly = false,
+        null|string $sameSite = null
+    ): array
+    {
+        $options = [];
 
-	/**
-	 * @param  string  $name
-	 * @param  null    $defaultValue
-	 *
-	 * @return mixed
-	 */
-	public static function get(string $name, $defaultValue = null): mixed
-	{
-		if(!self::exists($name)) {
-			return $defaultValue;
-		}
+        if ($expiration !== null) {
+            $options['expires'] = $expiration;
+        }
+        if ($path !== null) {
+            $options['path'] = $path;
+        }
+        if ($domain !== null && $domain !== '') {
+            $options['domain'] = $domain;
+        }
+        if ($secure !== null) {
+            $options['secure'] = $secure;
+        }
+        if ($httpOnly !== null) {
+            $options['httponly'] = $httpOnly;
+        }
+        if ($sameSite !== null) {
+            $options['samesite'] = $sameSite;
+        }
 
-		return $_COOKIE[$name];
-	}
+        return $options;
+    }
 
+    /**
+     * @param string $name
+     * @param null $defaultValue
+     *
+     * @return mixed
+     *
+     * NOTE: o valor retornado é bruto; quem exibir em HTML deve escapar com htmlspecialchars().
+     */
+    public static function get(string $name, $defaultValue = null): mixed
+    {
+        if (!self::exists($name)) {
+            return $defaultValue;
+        }
 
-	/**
-	 * @param  string  $name
-	 * @param  string  $path
-	 * @param  string  $domain
-	 * @param  bool    $secure
-	 *
-	 * @return bool
-	 */
-	public static function delete(string $name, string $path = '', string $domain = '', bool $secure = false): bool
-	{
-		if(array_key_exists($name, $_COOKIE)) {
-			if(false === setcookie($name, '', -1, $path, $domain, $secure)) {
-				return false;
-			}
+        return $_COOKIE[$name];
+    }
 
-			unset($_COOKIE[$name]);
-		}
+    /**
+     * @param string $name
+     *
+     * @return bool
+     */
+    public static function exists(string $name): bool
+    {
+        return isset($_COOKIE[$name]);
+    }
 
-		return true;
-	}
+    /**
+     * Deletes all cookies set for the current domain
+     *
+     * @return void
+     */
+    public static function clearAllCookies(): void
+    {
+        foreach (self::getAllCookies() as $name => $value) {
+            self::delete($name);
+        }
+    }
 
-	/**
-	 * @param  string  $name
-	 *
-	 * @return bool
-	 */
-	public static function exists(string $name): bool
-	{
-		return isset($_COOKIE[$name]);
-	}
+    /**
+     * Returns an array of all cookies set for the current domain
+     *
+     * @return array
+     */
+    public static function getAllCookies(): array
+    {
+        return $_COOKIE;
+    }
 
-	/**
-	 * Checks if a cookie is secure
-	 *
-	 * @param  string  $cookieName
-	 *
-	 * @return bool
-	 */
-	public static function isSecure(string $cookieName): bool
-	{
-		if(!self::exists($cookieName)) {
-			return false;
-		}
+    /**
+     * @param string $name
+     * @param string $path
+     * @param string $domain
+     * @param bool $secure
+     *
+     * @return bool
+     */
+    public static function delete(string $name, string $path = '', string $domain = '', bool $secure = false): bool
+    {
+        if (array_key_exists($name, $_COOKIE)) {
+            // @codeCoverageIgnoreStart
+            if (false === setcookie($name, '', -1, $path, $domain, $secure)) {
+                return false;
+            }
+            // @codeCoverageIgnoreEnd
 
-		return isset($_COOKIE[$cookieName]['secure']) && $_COOKIE[$cookieName]['secure'] === true;
-	}
+            unset($_COOKIE[$name]);
+        }
 
-	/**
-	 * Checks if a cookie is HTTP-only
-	 *
-	 * @param  string  $cookieName
-	 *
-	 * @return bool
-	 */
-	public static function isHttpOnly(string $cookieName): bool
-	{
-		if(!self::exists($cookieName)) {
-			return false;
-		}
+        return true;
+    }
 
-		return isset($_COOKIE[$cookieName]['httponly']) && $_COOKIE[$cookieName]['httponly'] === true;
-	}
+    /**
+     * Checks if the user has given consent to store cookies
+     *
+     * @return bool
+     */
+    public static function checkCookieConsent(): bool
+    {
+        return self::hasSessionConsent() || self::hasValidConsentSignature();
+    }
 
-	/**
-	 * Returns the expiration time of a cookie as a Unix timestamp
-	 *
-	 * @param  string  $cookieName
-	 *
-	 * @return int|null
-	 */
-	public static function getExpirationTime(string $cookieName): ?int
-	{
-		if(!self::exists($cookieName)) {
-			return null;
-		}
+    /**
+     * Returns an array of cookie values that match a given regular expression
+     *
+     * @param string $regex
+     *
+     * @return array
+     */
+    public static function getCookieValueByRegex(string $regex): array
+    {
+        self::assertSafeRegex($regex);
 
-		return isset($_COOKIE[$cookieName]['expires']) ? (int)$_COOKIE[$cookieName]['expires'] : null;
-	}
+        $matches = [];
+        foreach ($_COOKIE as $name => $value) {
+            if (self::matchesRegex($regex, $name)) {
+                $matches[] = $value;
+            }
+        }
 
-	/**
-	 * Returns the domain associated with a cookie
-	 *
-	 * @param  string  $cookieName
-	 *
-	 * @return mixed|null
-	 */
-	public static function getDomain(string $cookieName): mixed
-	{
-		if(!self::exists($cookieName)) {
-			return null;
-		}
+        return $matches;
+    }
 
-		return $_COOKIE[$cookieName]['domain'] ?? null;
-	}
+    /**
+     * Deletes all cookies that match a given regular expression
+     *
+     * @param string $regex
+     *
+     * @return bool
+     */
+    public static function deleteCookiesByRegex(string $regex): bool
+    {
+        self::assertSafeRegex($regex);
 
-	/**
-	 * Returns the path associated with a cookie
-	 *
-	 * @param  string  $cookieName
-	 *
-	 * @return string|null
-	 */
-	public static function getPath(string $cookieName): ?string
-	{
-		if(!self::exists($cookieName)) {
-			return null;
-		}
+        foreach (self::getAllCookies() as $cookieName => $cookieValue) {
+            if (self::matchesRegex($regex, $cookieName) && !self::delete($cookieName)) {
+                // @codeCoverageIgnoreStart
+                return false;
+                // @codeCoverageIgnoreEnd
+            }
+        }
 
-		return $_COOKIE[$cookieName]['path'] ?? null;
-	}
+        return true;
+    }
 
-	/**
-	 * Returns an array of all cookies set for the current domain
-	 *
-	 * @return array
-	 */
-	public static function getAllCookies(): array
-	{
-		return $_COOKIE;
-	}
+    private static function hasSessionConsent(): bool
+    {
+        return session_status() === PHP_SESSION_ACTIVE
+            && isset($_SESSION[self::CONSENT_COOKIE])
+            && $_SESSION[self::CONSENT_COOKIE] === true;
+    }
 
-	/**
-	 * Deletes all cookies set for the current domain
-	 *
-	 * @return void
-	 */
-	public static function clearAllCookies(): void
-	{
-		foreach(self::getAllCookies() as $name => $value) {
-			self::delete($name);
-		}
-	}
+    private static function hasValidConsentSignature(): bool
+    {
+        $secret = self::getCookieConsentSecret();
+        if (!$secret || !isset($_COOKIE[self::CONSENT_COOKIE], $_COOKIE[self::CONSENT_SIGNATURE_COOKIE])) {
+            return false;
+        }
 
-	/**
-	 * Checks if the user has given consent to store cookies
-	 *
-	 * @return bool
-	 */
-	public static function checkCookieConsent(): bool
-	{
-		if(isset($_COOKIE['cookie_consent']) && $_COOKIE['cookie_consent'] === 'true') {
-			return true;
-		}
+        if ($_COOKIE[self::CONSENT_COOKIE] !== 'true') {
+            return false;
+        }
 
-		if(isset($_SESSION['cookie_consent']) && $_SESSION['cookie_consent'] === true) {
-			return true;
-		}
+        $expected = hash_hmac('sha256', self::COOKIE_CONSENT_HMAC_KEY, $secret);
 
-		return false;
-	}
+        return hash_equals($expected, $_COOKIE[self::CONSENT_SIGNATURE_COOKIE]);
+    }
 
-	/**
-	 * Returns an array of cookie values that match a given regular expression
-	 *
-	 * @param  string  $regex
-	 *
-	 * @return array
-	 */
-	public static function getCookieValueByRegex(string $regex): array
-	{
-		$matches = [];
-		foreach($_COOKIE as $name => $value) {
-			if(preg_match($regex, $name)) {
-				$matches[] = $value;
-			}
-		}
-		return $matches;
-	}
+    private static function getCookieConsentSecret(): ?string
+    {
+        $secret = $_ENV['COOKIE_CONSENT_SECRET'] ?? $_SERVER['COOKIE_CONSENT_SECRET'] ?? getenv('COOKIE_CONSENT_SECRET');
 
-	/**
-	 * Deletes all cookies that match a given regular expression
-	 *
-	 * @param  string  $regex
-	 *
-	 * @return bool
-	 */
-	public static function deleteCookiesByRegex(string $regex): bool
-	{
-		foreach(self::getAllCookies() as $cookieName => $cookieValue) {
-			if(preg_match($regex, $cookieName) && !self::delete($cookieName)) {
-				return false;
-			}
-		}
+        return is_string($secret) && $secret !== '' ? $secret : null;
+    }
 
-		return true;
-	}
+    private static function assertSafeRegex(string $regex): void
+    {
+        if ($regex === '') {
+            throw new InvalidArgumentException('Regex não pode ser vazio');
+        }
+
+        if (strlen($regex) > self::SAFE_REGEX_MAX_LENGTH) {
+            throw new InvalidArgumentException('Regex muito longo');
+        }
+
+        if (!preg_match('/^(.)(.*)\\1[imsxuADSUXJ]*$/', $regex)) {
+            throw new InvalidArgumentException('Regex deve usar delimitador válido');
+        }
+
+        if (preg_match('/(\.\*){2,}/', $regex) || preg_match('/[\*\+\?]{3,}/', $regex) || preg_match('/\(\?/', $regex)) {
+            throw new InvalidArgumentException('Regex não permitido por razões de segurança');
+        }
+    }
+
+    private static function matchesRegex(string $regex, string $name): bool
+    {
+        $result = @preg_match($regex, $name);
+
+        if ($result === false || preg_last_error() !== PREG_NO_ERROR) {
+            throw new InvalidArgumentException('Erro ao executar regex');
+        }
+
+        return $result === 1;
+    }
 }

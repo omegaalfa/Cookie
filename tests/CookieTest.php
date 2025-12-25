@@ -1,173 +1,272 @@
 <?php
 
-namespace tests\src;
+declare(strict_types=1);
 
+namespace omegaalfa\Cookie\tests;
 
-use omegaalfa\Cookie\tests\MockCookieManagerTest;
+use omegaalfa\Cookie\Cookie;
+use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-
+use ReflectionClass;
 
 class CookieTest extends TestCase
 {
+    private array $originalServer;
+    private array $originalEnv;
+
     protected function setUp(): void
     {
-        // Limpa todos os cookies antes de cada teste
-        MockCookieManagerTest::clearAllCookies();
+        $this->originalServer = $_SERVER;
+        $this->originalEnv = $_ENV;
+        $_COOKIE = [];
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_unset();
+            session_destroy();
+        }
+        putenv('COOKIE_CONSENT_SECRET');
+        unset($_ENV['COOKIE_CONSENT_SECRET'], $_SERVER['COOKIE_CONSENT_SECRET']);
     }
 
-    public function testSetAndGetCookie()
+    protected function tearDown(): void
     {
-        // Define um cookie
-        $this->assertTrue(MockCookieManagerTest::set('test_cookie', 'test_value'));
-
-        // Verifica se o cookie foi definido corretamente
-        $this->assertEquals('test_value', MockCookieManagerTest::get('test_cookie'));
+        $_COOKIE = [];
+        $_SERVER = $this->originalServer;
+        $_ENV = $this->originalEnv;
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_unset();
+            session_destroy();
+        }
+        putenv('COOKIE_CONSENT_SECRET');
+        unset($_ENV['COOKIE_CONSENT_SECRET'], $_SERVER['COOKIE_CONSENT_SECRET']);
     }
 
-    public function testDeleteCookie()
+    /** @runInSeparateProcess */
+    public function testSet(): void
     {
-        // Define um cookie
-        MockCookieManagerTest::set('test_cookie', 'test_value');
-
-        // Deleta o cookie
-        $this->assertTrue(MockCookieManagerTest::delete('test_cookie'));
-
-        // Verifica se o cookie foi deletado
-        $this->assertNull(MockCookieManagerTest::get('test_cookie'));
+        $this->assertTrue(Cookie::set('test', 'value'));
     }
 
-    public function testCookieExists()
+    public function testGet(): void
     {
-        // Define um cookie
-        MockCookieManagerTest::set('test_cookie', 'test_value');
-
-        // Verifica se o cookie existe
-        $this->assertTrue(MockCookieManagerTest::exists('test_cookie'));
-
-        // Deleta o cookie
-        MockCookieManagerTest::delete('test_cookie');
-
-        // Verifica se o cookie não existe mais
-        $this->assertFalse(MockCookieManagerTest::exists('test_cookie'));
+        $this->assertEquals('default', Cookie::get('non_existent', 'default'));
+        $_COOKIE['test_cookie'] = 'test_value';
+        $this->assertEquals('test_value', Cookie::get('test_cookie'));
     }
 
-    public function testIsSecure()
+    public function testExists(): void
     {
-        // Define um cookie seguro
-        $this->assertTrue(MockCookieManagerTest::set('test_cookie', 'test_value', null, null, null, true));
-
-        // Verifica se o cookie é seguro
-        $this->assertTrue(MockCookieManagerTest::isSecure('test_cookie'));
+        $this->assertFalse(Cookie::exists('test_cookie'));
+        $_COOKIE['test_cookie'] = 'test_value';
+        $this->assertTrue(Cookie::exists('test_cookie'));
     }
 
-    public function testIsHttpOnly()
+    /** @runInSeparateProcess */
+    public function testDelete(): void
     {
-        // Define um cookie HTTP-only
-        $this->assertTrue(MockCookieManagerTest::set('test_cookie', 'test_value', null, null, null, false, true));
-
-        // Verifica se o cookie é HTTP-only
-        $this->assertTrue(MockCookieManagerTest::isHttpOnly('test_cookie'));
+        $_COOKIE['test_cookie'] = 'test_value';
+        $this->assertTrue(Cookie::delete('test_cookie'));
+        $this->assertArrayNotHasKey('test_cookie', $_COOKIE);
+        $this->assertTrue(Cookie::delete('non_existent'));
     }
 
-    public function testGetExpirationTime()
+    public function testGetAllCookies(): void
     {
-        // Define um cookie com tempo de expiração
+        $this->assertEmpty(Cookie::getAllCookies());
+        $_COOKIE = ['test1' => 'val1', 'test2' => 'val2'];
+        $this->assertEquals(['test1' => 'val1', 'test2' => 'val2'], Cookie::getAllCookies());
+    }
+
+    /** @runInSeparateProcess */
+    public function testClearAllCookies(): void
+    {
+        $_COOKIE = ['test1' => 'val1', 'test2' => 'val2'];
+        Cookie::clearAllCookies();
+        $this->assertEmpty($_COOKIE);
+    }
+
+    public function testSetCookieOptions(): void
+    {
         $expiration = time() + 3600;
-        $this->assertTrue(MockCookieManagerTest::set('test_cookie', 'test_value', $expiration));
-
-        // Verifica o tempo de expiração do cookie
-        $this->assertEquals($expiration, MockCookieManagerTest::getExpirationTime('test_cookie'));
+        $options = Cookie::setCookieOptions($expiration, '/', 'domain.com', true, true, 'Strict');
+        $expected = [
+            'expires' => $expiration,
+            'path' => '/',
+            'domain' => 'domain.com',
+            'secure' => true,
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ];
+        $this->assertEquals($expected, $options);
     }
 
-    public function testGetDomain()
+    public function testSetCookieOptionsWithNullValues(): void
     {
-        // Define um cookie com domínio
-        $this->assertTrue(MockCookieManagerTest::set('test_cookie', 'test_value', null, null, 'example.com'));
-
-        // Verifica o domínio do cookie
-        $this->assertEquals('example.com', MockCookieManagerTest::getDomain('test_cookie'));
+        $options = Cookie::setCookieOptions(null, '/path', null, null, null, null);
+        $this->assertEquals(['path' => '/path'], $options);
     }
 
-    public function testGetPath()
+    public function testSetCookieOptionsPreservesFalseValues(): void
     {
-        // Define um cookie com caminho
-        $this->assertTrue(MockCookieManagerTest::set('test_cookie', 'test_value', null, '/path'));
-
-        // Verifica o caminho do cookie
-        $this->assertEquals('/path', MockCookieManagerTest::getPath('test_cookie'));
+        $options = Cookie::setCookieOptions(0, '/path', '', false, false, 'Lax');
+        $expected = [
+            'expires' => 0,
+            'path' => '/path',
+            'secure' => false,
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ];
+        $this->assertEquals($expected, $options);
     }
 
-    public function testGetAllCookies()
+    public function testSetCookieOptionsExcludesEmptyDomain(): void
     {
-        // Define dois cookies
-        MockCookieManagerTest::set('test_cookie1', 'test_value1');
-        MockCookieManagerTest::set('test_cookie2', 'test_value2');
-
-        // Verifica se ambos os cookies foram definidos
-        $allCookies = MockCookieManagerTest::getAllCookies();
-        $this->assertCount(2, $allCookies);
-
-        $this->assertEquals('test_value1', MockCookieManagerTest::get('test_cookie1'));
-        $this->assertEquals('test_value2', MockCookieManagerTest::get('test_cookie2'));
-
-        // Limpa todos os cookies
-        MockCookieManagerTest::clearAllCookies();
-
-        // Verifica se todos os cookies foram limpos
-        $this->assertEmpty((MockCookieManagerTest::getAllCookies()));
+        $options = Cookie::setCookieOptions(null, '/', '', true, true, 'Strict');
+        $this->assertArrayNotHasKey('domain', $options);
     }
 
-    public function testClearAllCookies()
+    public function testCheckCookieConsentWithValidSignature(): void
     {
-        // Define dois cookies
-        MockCookieManagerTest::set('test_cookie1', 'test_value1');
-        MockCookieManagerTest::set('test_cookie2', 'test_value2');
-
-        // Limpa todos os cookies
-        MockCookieManagerTest::clearAllCookies();
-
-        // Verifica se todos os cookies foram limpos
-        $this->assertEmpty(MockCookieManagerTest::getAllCookies());
+        $secret = 'a-very-secret-key';
+        $_ENV['COOKIE_CONSENT_SECRET'] = $secret;
+        $_COOKIE['cookie_consent'] = 'true';
+        $signature = hash_hmac('sha256', 'cookie_consent:true', $secret);
+        $_COOKIE['cookie_consent_signature'] = $signature;
+        $this->assertTrue(Cookie::checkCookieConsent());
     }
 
-    public function testCheckCookieConsent()
+    #[DataProvider('provideHasSessionConsentCases')]
+    public function testHasSessionConsent(bool $startSession, ?bool $consentValue, bool $expected): void
     {
-        // Define um cookie de consentimento
-        MockCookieManagerTest::set('cookie_consent', 'true');
-
-        // Verifica se o consentimento de cookie está presente
-        $this->assertTrue(MockCookieManagerTest::checkCookieConsent());
-
-        // Limpa o cookie de consentimento
-        MockCookieManagerTest::delete('cookie_consent');
-
-        // Verifica se o consentimento de cookie não está mais presente
-        $this->assertFalse(MockCookieManagerTest::checkCookieConsent());
+        if ($startSession) {
+            @session_start();
+            if ($consentValue !== null) {
+                $_SESSION['cookie_consent'] = $consentValue;
+            }
+        }
+        $this->assertSame($expected, Cookie::checkCookieConsent());
     }
 
-    public function testGetCookieValueByRegex()
+    public static function provideHasSessionConsentCases(): array
     {
-        // Define dois cookies
-        MockCookieManagerTest::set('test_cookie1', 'value1');
-        MockCookieManagerTest::set('test_cookie2', 'value2');
+        return [
+            'active session, consent true' => [true, true, true],
+            'active session, consent false' => [true, false, false],
+            'active session, consent not set' => [true, null, false],
+            'inactive session, consent var set' => [false, true, false],
+        ];
+    }
 
-        // Obtém valores de cookies que correspondem a uma expressão regular
-        $matches = MockCookieManagerTest::getCookieValueByRegex('/^test_cookie/');
+    #[DataProvider('provideHasValidSignatureCases')]
+    public function testHasValidSignature(
+        ?string $secret,
+        ?string $consentCookie,
+        ?string $signatureCookie,
+        bool $expected
+    ): void {
+        if ($secret !== null) {
+            $_ENV['COOKIE_CONSENT_SECRET'] = $secret;
+        }
+        if ($consentCookie !== null) {
+            $_COOKIE['cookie_consent'] = $consentCookie;
+        }
+        if ($signatureCookie !== null) {
+            $_COOKIE['cookie_consent_signature'] = $signatureCookie;
+        }
+        $this->assertSame($expected, Cookie::checkCookieConsent());
+    }
+
+    public static function provideHasValidSignatureCases(): array
+    {
+        $secret = 'secret';
+        $validSignature = hash_hmac('sha256', 'cookie_consent:true', $secret);
+        return [
+            'all valid' => [$secret, 'true', $validSignature, true],
+            'no secret' => [null, 'true', $validSignature, false],
+            'no consent cookie' => [$secret, null, $validSignature, false],
+            'no signature cookie' => [$secret, 'true', null, false],
+            'invalid signature' => [$secret, 'true', 'invalid', false],
+            'consent not true' => [$secret, 'false', $validSignature, false],
+        ];
+    }
+
+    #[DataProvider('provideSecretFallbackCases')]
+    public function testGetCookieConsentSecretFallback(
+        ?string $env,
+        ?string $server,
+        ?string $getenv,
+        ?string $expected
+    ): void {
+        if ($env !== null) $_ENV['COOKIE_CONSENT_SECRET'] = $env;
+        if ($server !== null) $_SERVER['COOKIE_CONSENT_SECRET'] = $server;
+        if ($getenv !== null) putenv("COOKIE_CONSENT_SECRET=$getenv");
+
+        $reflection = new ReflectionClass(Cookie::class);
+        $method = $reflection->getMethod('getCookieConsentSecret');
+        $method->setAccessible(true);
+        $this->assertSame($expected, $method->invoke(null));
+    }
+
+    public static function provideSecretFallbackCases(): array
+    {
+        return [
+            'prefers env' => ['env-secret', 'server-secret', 'getenv-secret', 'env-secret'],
+            'falls back to server' => [null, 'server-secret', 'getenv-secret', 'server-secret'],
+            'falls back to getenv' => [null, null, 'getenv-secret', 'getenv-secret'],
+            'all null' => [null, null, null, null],
+            'empty strings are null' => ['', '', '', null],
+        ];
+    }
+
+    public function testGetCookieValueByRegexWithValidRegex(): void
+    {
+        $_COOKIE = ['user_1' => 'Alice', 'user_2' => 'Bob'];
+        $matches = Cookie::getCookieValueByRegex('/^user_/');
         $this->assertCount(2, $matches);
-        $this->assertContains('value1', $matches);
-        $this->assertContains('value2', $matches);
     }
 
-    public function testDeleteCookiesByRegex()
+    public function testRegexThrowsExceptionIfEmpty(): void
     {
-        // Define dois cookies
-        MockCookieManagerTest::set('test_cookie1', 'value1');
-        MockCookieManagerTest::set('test_cookie2', 'value2');
+        $this->expectException(InvalidArgumentException::class);
+        Cookie::getCookieValueByRegex('');
+    }
 
-        // Deleta cookies que correspondem a uma expressão regular
-        $this->assertTrue(MockCookieManagerTest::deleteCookiesByRegex('/^test_cookie/'));
+    public function testRegexAtMaxLengthIsAllowed(): void
+    {
+        $reflection = new ReflectionClass(Cookie::class);
+        $maxLength = $reflection->getConstant('SAFE_REGEX_MAX_LENGTH');
+        $regex = '/' . str_repeat('a', $maxLength - 2) . '/';
+        Cookie::getCookieValueByRegex($regex);
+        $this->expectNotToPerformAssertions();
+    }
 
-        // Verifica se os cookies foram deletados
-        $this->assertEmpty(MockCookieManagerTest::getAllCookies());
+    public function testRegexThrowsExceptionIfTooLong(): void
+    {
+        $reflection = new ReflectionClass(Cookie::class);
+        $maxLength = $reflection->getConstant('SAFE_REGEX_MAX_LENGTH');
+        $regex = '/' . str_repeat('a', $maxLength - 1) . '/';
+        $this->expectException(InvalidArgumentException::class);
+        Cookie::getCookieValueByRegex($regex);
+    }
+
+    public function testDeleteCookiesByRegex(): void
+    {
+        $_COOKIE = ['user_1' => 'Alice', 'session_id' => 'xyz'];
+        $this->assertTrue(Cookie::deleteCookiesByRegex('/^user_/'));
+        $this->assertArrayNotHasKey('user_1', $_COOKIE);
+        $this->assertArrayHasKey('session_id', $_COOKIE);
+    }
+
+    public function testDeleteCookiesByRegexRejectsUnsafePattern(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        Cookie::deleteCookiesByRegex('/(?=unsafe)/');
+    }
+
+    public function testMatchesRegexThrowsExceptionOnError(): void
+    {
+        $_COOKIE['dummy'] = 'value';
+        $this->expectException(InvalidArgumentException::class);
+        Cookie::getCookieValueByRegex('/(unclosed-group/');
     }
 }

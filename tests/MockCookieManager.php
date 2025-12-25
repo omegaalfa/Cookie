@@ -1,12 +1,27 @@
 <?php
 
+declare(strict_types=1);
+
 namespace omegaalfa\Cookie\tests;
 
 use omegaalfa\Cookie\CookieInterface;
 
-class MockCookieManagerTest implements CookieInterface
+/**
+ * Mock implementation of CookieInterface for testing purposes.
+ * This class simulates cookie operations in memory without requiring
+ * actual HTTP headers to be sent.
+ */
+class MockCookieManager implements CookieInterface
 {
     private static array $cookies = [];
+
+    /**
+     * Reset all cookies (useful for test isolation)
+     */
+    public static function reset(): void
+    {
+        self::$cookies = [];
+    }
 
     public static function set(
         string $name,
@@ -18,7 +33,6 @@ class MockCookieManagerTest implements CookieInterface
         bool|null $httpOnly = false,
         null|string $sameSite = null
     ): bool {
-        // Simula a definição de um cookie
         $cookie = [
             'value'      => $value,
             'expiration' => $expiration,
@@ -40,19 +54,25 @@ class MockCookieManagerTest implements CookieInterface
         bool|null $httpOnly = false,
         null|string $sameSite = null
     ): array {
-        $options = [
-            'expires'  => $expiration,
-            'path'     => $path,
-            'domain'   => $domain,
-            'secure'   => $secure,
-            'httponly' => $httpOnly,
-            'samesite' => $sameSite,
-        ];
+        $options = [];
 
-        foreach($options as $key => $option) {
-            if(!$option) {
-                unset($options[$key]);
-            }
+        if ($expiration !== null) {
+            $options['expires'] = $expiration;
+        }
+        if ($path !== null) {
+            $options['path'] = $path;
+        }
+        if ($domain !== null && $domain !== '') {
+            $options['domain'] = $domain;
+        }
+        if ($secure !== null) {
+            $options['secure'] = $secure;
+        }
+        if ($httpOnly !== null) {
+            $options['httponly'] = $httpOnly;
+        }
+        if ($sameSite !== null) {
+            $options['samesite'] = $sameSite;
         }
 
         return $options;
@@ -60,77 +80,40 @@ class MockCookieManagerTest implements CookieInterface
 
     public static function get(string $name, mixed $defaultValue = null): mixed
     {
-        // Simula a obtenção de um cookie
         return self::$cookies[$name]['value'] ?? $defaultValue;
     }
 
     public static function delete(string $name, string $path = '', string $domain = '', bool $secure = false): bool
     {
-        // Simula a deleção de um cookie
         unset(self::$cookies[$name]);
         return true;
     }
 
     public static function exists(string $name): bool
     {
-        // Simula a verificação de existência de um cookie
         return isset(self::$cookies[$name]);
-    }
-
-    public static function isSecure(string $cookieName): bool
-    {
-        // Simula a verificação de segurança de um cookie
-        return self::$cookies[$cookieName]['secure'] ?? false;
-    }
-
-    public static function isHttpOnly(string $cookieName): bool
-    {
-        // Simula a verificação de HTTP-only de um cookie
-        return self::$cookies[$cookieName]['httpOnly'] ?? false;
-    }
-
-    public static function getExpirationTime(string $cookieName): ?int
-    {
-        // Simula a obtenção do tempo de expiração de um cookie
-        return self::$cookies[$cookieName]['expiration'] ?? null;
-    }
-
-    public static function getDomain(string $cookieName): mixed
-    {
-        // Simula a obtenção do domínio de um cookie
-        return self::$cookies[$cookieName]['domain'] ?? null;
-    }
-
-    public static function getPath(string $cookieName): ?string
-    {
-        // Simula a obtenção do caminho de um cookie
-        return self::$cookies[$cookieName]['path'] ?? null;
     }
 
     public static function getAllCookies(): array
     {
-        // Simula a obtenção de todos os cookies
         return self::$cookies;
     }
 
     public static function clearAllCookies(): void
     {
-        // Simula a limpeza de todos os cookies
         self::$cookies = [];
     }
 
     public static function checkCookieConsent(): bool
     {
-        // Simula a verificação de consentimento de cookies
         return isset(self::$cookies['cookie_consent']) && self::$cookies['cookie_consent']['value'] === 'true';
     }
 
     public static function getCookieValueByRegex(string $regex): array
     {
-        // Simula a obtenção de valores de cookie que correspondem a uma expressão regular
         $matches = [];
-        foreach(self::$cookies as $name => $cookie) {
-            if(preg_match($regex, $name)) {
+        foreach (self::$cookies as $name => $cookie) {
+            if (preg_match($regex, $name)) {
                 $matches[] = $cookie['value'];
             }
         }
@@ -139,8 +122,8 @@ class MockCookieManagerTest implements CookieInterface
 
     public static function deleteCookiesByRegex(string $regex): bool
     {
-        foreach(self::getAllCookies() as $cookieName => $cookieValue) {
-            if(preg_match($regex, $cookieName) && !self::delete($cookieName)) {
+        foreach (self::getAllCookies() as $cookieName => $cookieValue) {
+            if (preg_match($regex, $cookieName) && !self::delete($cookieName)) {
                 return false;
             }
         }
